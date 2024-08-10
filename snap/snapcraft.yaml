@@ -1,0 +1,100 @@
+name: op-reth
+title: op-reth
+base: core22
+adopt-info: op-reth
+summary: Reth Optimism (OP Stack)
+license: MIT
+contact: info@dwellir.com
+issues: https://github.com/dwellir-public/snap-op-reth/issues
+source-code: https://github.com/dwellir-public/snap-op-reth/
+website: https://www.dwellir.com
+grade: stable
+confinement: strict
+
+architectures:
+  - amd64
+
+description: |
+  https://github.com/paradigmxyz/reth
+  
+  Configuration: https://op-reth.rs/run/config.html
+  
+  OP node: "op-reth node \
+    --chain base \
+    --rollup.sequencer-http https://mainnet-sequencer.base.org \
+    --http \
+    --ws \
+    --authrpc.port 9551 \
+    --authrpc.jwtsecret /path/to/jwt.hex"
+
+  snap set op-reth service-args=...
+
+parts:
+  op-reth:
+    plugin: rust
+    source: https://github.com/paradigmxyz/reth.git
+    source-tag: v1.0.4
+    source-depth: 1
+    build-packages:
+      - build-essential
+      - git 
+      - libclang-dev 
+      - pkg-config
+      - protobuf-compiler
+    # Make the commit hash available for snap info
+    override-pull: |
+      craftctl default
+      craftctl set version="1.0.4-$(git rev-parse --short HEAD)"
+      rustup default stable
+      rustup update
+     
+    override-build: |
+      export FEATURES="jemalloc"
+      export PROFILE="maxperf"
+
+      # Makes op-reth into the target dir
+      make build-op
+      
+      # Create install bin
+      mkdir -p "${CRAFT_PART_INSTALL}"/bin
+
+      # Place reth into bin
+      cp target/maxperf/op-reth ${CRAFT_PART_INSTALL}/bin/
+    
+    stage:
+      - bin/op-reth
+
+    prime:
+      - bin/op-reth
+
+  wrappers:
+    plugin: dump
+    source-type: local
+    source: .
+    stage:
+      - wrappers/
+  
+  utils:
+      plugin: dump
+      source-type: local
+      source: .
+      stage:
+        - utils/
+
+apps:
+  op-reth-daemon:
+    command: wrappers/start-op-reth.bash
+    daemon: simple
+    install-mode: disable
+    refresh-mode: endure
+    restart-condition: never
+    plugs:
+      - network
+      - network-bind
+      - system-observe 
+      - removable-media
+    environment:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
+  op-reth:
+    command: bin/op-reth
